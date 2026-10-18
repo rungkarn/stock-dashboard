@@ -145,6 +145,28 @@ def crossed(fast, slow, within):
 
 
 TREND_LABELS = {6: "strong_up", 5: "strong_up", 4: "up", 3: "side", 2: "side", 1: "down", 0: "strong_down"}
+UPTREND, DOWNTREND = {"strong_up", "up"}, {"down", "strong_down"}
+TREND_LOOKBACK = 5      # "trend changed" signal compares with this many bars ago
+SCORE_HISTORY = 120     # bars of daily trend score kept for the detail strip
+
+
+def score_at(closes, back=0):
+    """Trend score 0-6 as it was `back` bars before the last bar (see README 2.1)."""
+    xs = closes[: len(closes) - back] if back else closes
+    if not xs:
+        return None
+    c = xs[-1]
+    ma20, ma50, ma200 = sma(xs, 20), sma(xs, 50), sma(xs, 200)
+    ma50_prev = sma_at(xs, 50, 10)
+    checks = [
+        ma20 is not None and c > ma20,
+        ma50 is not None and c > ma50,
+        ma200 is not None and c > ma200,
+        None not in (ma20, ma50) and ma20 > ma50,
+        None not in (ma50, ma200) and ma50 > ma200,
+        None not in (ma50, ma50_prev) and ma50 > ma50_prev,
+    ]
+    return sum(bool(x) for x in checks)
 
 
 def metrics(doc, bench_ret3m=None):
@@ -156,16 +178,10 @@ def metrics(doc, bench_ret3m=None):
     c = closes[-1]
     ma20, ma50, ma200 = sma(closes, 20), sma(closes, 50), sma(closes, 200)
     ma50_prev = sma_at(closes, 50, 10)
-
-    checks = [
-        ma20 is not None and c > ma20,
-        ma50 is not None and c > ma50,
-        ma200 is not None and c > ma200,
-        None not in (ma20, ma50) and ma20 > ma50,
-        None not in (ma50, ma200) and ma50 > ma200,
-        None not in (ma50, ma50_prev) and ma50 > ma50_prev,
-    ]
-    score = sum(bool(x) for x in checks)
+    score = score_at(closes)
+    hist = [score_at(closes, k) for k in range(min(SCORE_HISTORY, len(closes)) - 1, -1, -1)]
+    prev = score_at(closes, TREND_LOOKBACK) if len(closes) > TREND_LOOKBACK + 50 else None
+    trend, trend_prev = TREND_LABELS[score], (None if prev is None else TREND_LABELS[prev])
 
     def ret(n):
         return pct(c, closes[-1 - n]) if len(closes) > n else None
@@ -191,6 +207,10 @@ def metrics(doc, bench_ret3m=None):
     vr = round(vols[-1] / avg20v, 2) if avg20v else None
     if vr and vr >= 2:
         sig.append("vol_spike")
+    if trend_prev and trend in UPTREND and trend_prev not in UPTREND:
+        sig.append("enter_up")
+    if trend_prev and trend in DOWNTREND and trend_prev not in DOWNTREND:
+        sig.append("enter_dn")
 
     r3m = ret(63)
     return {
@@ -212,7 +232,10 @@ def metrics(doc, bench_ret3m=None):
         "vs_ma200": pct(c, ma200),
         "ma50_slope": pct(ma50, ma50_prev),
         "score": score,
-        "trend": TREND_LABELS[score],
+        "trend": trend,
+        "score_prev": prev,
+        "trend_prev": trend_prev,
+        "score_hist": hist,
         "hi52": hi,
         "lo52": lo,
         "pos52": round((c - lo) / (hi - lo) * 100, 1) if hi > lo else None,

@@ -301,3 +301,10 @@ table.ev tr { cursor: default; }
 .modal ul.small { color: var(--ink-2); font-size: 13px; padding-left: 20px; margin: 0 0 12px; }
 .modal code { font-size: 12px; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 @media (max-width: 560px) { .pbtn #portBtnText { display: none; } }
+
+/* ---------- trend change ---------- */
+.tchg { font-size: 10px; margin-left: 2px; }
+.trend-strip { margin-top: 6px; }
+.ts-h { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+.ts { display: flex; gap: 1px; height: 14px; }
+.ts i { flex: 1 1 0; min-width: 1px; border-radius: 1px; }

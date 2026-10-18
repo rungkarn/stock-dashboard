@@ -10,6 +10,7 @@
   ];
   const TREND_LABEL = Object.fromEntries(TRENDS.map((t) => [t.k, t.label]));
   const SIGNALS = [
+    { k: "enter_up", label: "เพิ่งเข้าสู่ขาขึ้น (เทียบ 5 วันก่อน)", icon: "⬆" },
     { k: "high52", label: "ทำจุดสูงสุดใหม่ 52 สัปดาห์", icon: "▲" },
     { k: "golden", label: "Golden cross (MA50 ตัดขึ้น MA200)", icon: "✕" },
     { k: "x_ma50_up", label: "ราคาตัดขึ้นเหนือ MA50 (3 วัน)", icon: "↗" },
@@ -17,6 +18,7 @@
     { k: "x_ma50_dn", label: "ราคาหลุด MA50 (3 วัน)", icon: "↘" },
     { k: "death", label: "Death cross (MA50 ตัดลง MA200)", icon: "✕" },
     { k: "low52", label: "ทำจุดต่ำสุดใหม่ 52 สัปดาห์", icon: "▼" },
+    { k: "enter_dn", label: "เพิ่งเข้าสู่ขาลง (เทียบ 5 วันก่อน)", icon: "⬇" },
   ];
   // corporate-action types: short chart letter + Thai label + colour slot
   const CA = {
@@ -195,7 +197,10 @@
   function trendBadge(r) {
     if (!r.trend) return "–";
     const dots = Array.from({ length: 6 }, (_, i) => `<i class="${i < r.score ? "f" : ""}"></i>`).join("");
-    return `<span class="badge" style="--c:var(--t-${r.trend})" title="คะแนน ${r.score}/6"><span class="dots">${dots}</span>${TREND_LABEL[r.trend]}</span>`;
+    const d = r.score_prev == null ? 0 : r.score - r.score_prev;
+    const arrow = d > 0 ? `<span class="tchg pos" aria-label="ดีขึ้น">▲</span>` : d < 0 ? `<span class="tchg neg" aria-label="แย่ลง">▼</span>` : "";
+    const tip = `คะแนน ${r.score}/6` + (r.score_prev == null ? "" : ` · 5 วันก่อน ${r.score_prev}/6 (${TREND_LABEL[r.trend_prev]})`);
+    return `<span class="badge" style="--c:var(--t-${r.trend})" title="${tip}"><span class="dots">${dots}</span>${TREND_LABEL[r.trend]}${arrow}</span>`;
   }
   const caTag = (t, extra = "") => {
     const c = caInfo(t);
@@ -406,8 +411,9 @@
       const hits = rows.filter((r) => r.signals.includes(s.k))
         .sort((a, b) => s.k === "vol_spike" ? b.vol_ratio - a.vol_ratio : (b.chg ?? 0) - (a.chg ?? 0));
       const chips = hits.map((r) => {
-        const extra = s.k === "vol_spike" ? `${nf(1).format(r.vol_ratio)}×` : pctFmt(r.chg);
-        const c = s.k === "vol_spike" ? "" : cls(r.chg);
+        const isTrend = s.k.startsWith("enter_");
+        const extra = s.k === "vol_spike" ? `${nf(1).format(r.vol_ratio)}×` : isTrend ? `จาก${TREND_LABEL[r.trend_prev]}` : pctFmt(r.chg);
+        const c = s.k === "vol_spike" || isTrend ? "" : cls(r.chg);
         return `<button class="chip" data-sym="${esc(r.symbol)}">${esc(r.symbol)}<small class="${c}">${extra}</small></button>`;
       }).join("");
       return `<div class="sig"><h3><span aria-hidden="true">${s.icon}</span>${s.label} <span class="hint">${hits.length}</span></h3>
@@ -749,6 +755,7 @@
       return { time: t, position: "aboveBar", shape: "circle", color: css(caInfo(main.type).c), text: [...new Set(evs.map((e) => caInfo(e.type).m))].join("") };
     });
     candle.setMarkers(markers);
+    drawTrendStrip(bars);
     if (cost) {
       candle.createPriceLine({ price: cost, color: css("--ink-2"), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: "ทุน" });
     }
@@ -764,6 +771,20 @@
     };
     chart.subscribeCrosshairMove((p) => legend(p && p.time));
     legend(null);
+  }
+
+  // one cell per day: trend label of that day's score (last ~120 bars)
+  function drawTrendStrip(bars) {
+    const r = state.rows.find((x) => x.symbol === chartState.sym);
+    const el = $("#trendStrip");
+    const h = r && r.score_hist;
+    if (!h || !h.length) { el.innerHTML = ""; return; }
+    const LBL = { 6: "strong_up", 5: "strong_up", 4: "up", 3: "side", 2: "side", 1: "down", 0: "strong_down" };
+    const dates = bars.slice(-h.length).map((b) => b[0]);
+    const changes = h.filter((v, i) => i && LBL[v] !== LBL[h[i - 1]]).length;
+    el.innerHTML = `<div class="ts-h"><span>คะแนนแนวโน้มรายวัน ${h.length} วันล่าสุด</span><span class="hint">เปลี่ยนกลุ่ม ${changes} ครั้ง · ${dates[0]} → ${dates[dates.length - 1]}</span></div>
+      <div class="ts" role="img" aria-label="แนวโน้มย้อนหลัง: ${TREND_LABEL[LBL[h[0]]]} ถึง ${TREND_LABEL[LBL[h[h.length - 1]]]}">${h.map((v, i) =>
+        `<i style="background:var(--t-${LBL[v]})" title="${dates[i] || ""}: ${TREND_LABEL[LBL[v]]} (${v}/6)"></i>`).join("")}</div>`;
   }
 
   function maAt(bars, i, n) {
