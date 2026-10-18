@@ -16,7 +16,10 @@
     <h1>แนวโน้มหุ้นในพอร์ต</h1>
     <p class="sub" id="asof">กำลังโหลด…</p>
   </div>
-  <button class="ghost" id="themeBtn" title="สลับโหมดสว่าง/มืด" aria-label="สลับโหมดสว่าง/มืด">◐</button>
+  <div class="top-actions">
+    <button class="pbtn" id="portBtn" title="แสดงต้นทุนและกำไร/ขาดทุนของคุณ (เก็บในเบราว์เซอร์นี้เท่านั้น)">🔒 <span id="portBtnText">พอร์ตส่วนตัว</span></button>
+    <button class="ghost" id="themeBtn" title="สลับโหมดสว่าง/มืด" aria-label="สลับโหมดสว่าง/มืด">◐</button>
+  </div>
 </header>
 
 <main>
@@ -75,6 +78,7 @@
           <option value="r1y">1 ปี</option>
           <option value="vs_ma200">vs MA200</option>
           <option value="f_yield">Dividend yield</option>
+          <option value="p_pl" class="popt" disabled>%P/L เทียบทุน (พอร์ตส่วนตัว)</option>
         </select></label>
         <label class="chk"><input type="checkbox" id="heatBySector"> แยกตามกลุ่มอุตสาหกรรม</label>
       </div>
@@ -97,6 +101,9 @@
           <th data-k="vol_ratio">Vol / เฉลี่ย</th>
           <th data-k="rsi">RSI</th>
           <th data-k="rs3m">เทียบตลาด 3M</th>
+          <th data-k="p_cost" class="pcol">ทุนเฉลี่ย</th>
+          <th data-k="p_pl" class="pcol">%P/L</th>
+          <th data-k="p_weight" class="pcol">น้ำหนัก</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -119,6 +126,8 @@
           <th data-k="f_caps" class="l" title="XR/XW/XB/ปันผลหุ้น ใน 3 ปี">เพิ่มทุน 3 ปี</th>
           <th data-k="f_mcap">Market cap</th>
           <th data-k="f_sector" class="l">กลุ่ม</th>
+          <th data-k="p_yoc" class="pcol" title="ปันผลปีล่าสุด ÷ ทุนเฉลี่ยของคุณ">Yield on cost</th>
+          <th data-k="p_income" class="pcol" title="ปันผลปีล่าสุด × จำนวนหุ้น">ปันผล/ปี (บาท)</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -142,6 +151,27 @@
     </ul>
   </details>
 </main>
+
+<div class="drawer" id="portDlg" hidden>
+  <div class="drawer-bg" data-pclose></div>
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="pTitle">
+    <header class="drawer-h">
+      <h2 id="pTitle">🔒 พอร์ตส่วนตัว</h2>
+      <button class="ghost" data-pclose aria-label="ปิด">✕</button>
+    </header>
+    <p>เลือกไฟล์พอร์ตจาก repo private เพื่อแสดง <b>ทุนเฉลี่ย, %กำไร/ขาดทุน, น้ำหนักในพอร์ต, เส้นทุนบนกราฟ และ yield on cost</b></p>
+    <ul class="small">
+      <li>ไฟล์ถูกอ่าน<b>ในเบราว์เซอร์นี้เท่านั้น</b> ไม่ถูกส่งขึ้นเซิร์ฟเวอร์หรือ GitHub</li>
+      <li>เก็บไว้ใน localStorage ของเบราว์เซอร์/อุปกรณ์นี้ เปิดครั้งหน้าไม่ต้องเลือกใหม่ — ใช้เครื่องสาธารณะให้กด "ล้างข้อมูล" ทุกครั้ง</li>
+      <li>รองรับ <code>data/portfolio_dividend.json</code> (แนะนำ) หรือ <code>portfolio_data.json</code> ของ repo <code>stock</code> — หุ้น NVDR (-R) รวมเข้าหุ้นแม่ด้วยทุนเฉลี่ยถ่วงน้ำหนัก</li>
+    </ul>
+    <div class="toolbar">
+      <label class="pbtn file">เลือกไฟล์…<input type="file" id="portFile" accept=".json,application/json" hidden></label>
+      <button class="pbtn" id="portClear">ล้างข้อมูล</button>
+    </div>
+    <p class="hint" id="portStatus"></p>
+  </section>
+</div>
 
 <div class="drawer" id="drawer" hidden>
   <div class="drawer-bg" data-close></div>

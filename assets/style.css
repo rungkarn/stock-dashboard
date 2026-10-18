@@ -281,3 +281,23 @@ table.ev tr { cursor: default; }
 .linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 6px 0; font-size: 13px; }
 #dFund .hint { margin-top: 6px; }
 #dFund .stats { margin-top: 0; }
+
+/* ---------- private portfolio overlay ---------- */
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.pbtn {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 8px; height: 36px; padding: 0 12px;
+  cursor: pointer; color: var(--ink-2); font-size: 13px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.pbtn:hover { background: var(--surface-2); }
+.has-port #portBtn { color: var(--ink); border-color: var(--accent); }
+.pcol { display: none; }
+.has-port .pcol { display: table-cell; }
+#breadthValue .vb-h { margin: 14px 0 8px; }
+.modal {
+  position: absolute; left: 50%; top: 10vh; transform: translateX(-50%); width: min(560px, calc(100% - 32px));
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+}
+.modal p { margin: 10px 0; }
+.modal ul.small { color: var(--ink-2); font-size: 13px; padding-left: 20px; margin: 0 0 12px; }
+.modal code { font-size: 12px; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
+@media (max-width: 560px) { .pbtn #portBtnText { display: none; } }

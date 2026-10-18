@@ -32,7 +32,92 @@
 
   const $ = (s) => document.querySelector(s);
   const state = { rows: [], q: "", trend: null, group: "all", sector: "", view: "table", sort: "score", asc: false, heatKey: "r1m", bySector: false };
-  let summary = null, setInfo = null;
+  let summary = null, setInfo = null, baseRows = [];
+
+  // ---------- private portfolio (browser-only; never sent anywhere) ----------
+  const PORT_KEY = "trendboard-portfolio";
+  let port = null; // {loaded, source, pos: {SYM: {shares, cost}}}
+  try { port = JSON.parse(localStorage.getItem(PORT_KEY) || "null"); } catch (e) { port = null; }
+
+  function parsePortfolio(j) {
+    const pos = {};
+    const add = (sym, shares, cost) => {
+      if (!sym || !(shares > 0)) return;
+      const p = pos[sym] || (pos[sym] = { shares: 0, amount: 0 });
+      p.shares += shares;
+      p.amount += shares * (cost || 0);
+    };
+    if (j && Array.isArray(j.rows)) {
+      // data/portfolio_dividend.json — one row per underlying, NVDR already merged
+      j.rows.forEach((r) => add(String(r.base || r.Symbol || "").trim().split(/\s/)[0], +r.Shares, +r.Cost));
+    } else if (j && typeof j === "object") {
+      // portfolio_data.json — {SYM | SYM-R: {volume, avg_cost}}
+      Object.entries(j).forEach(([k, v]) => {
+        if (!v || typeof v !== "object" || !("volume" in v)) return;
+        add(k.replace(/-R$/, ""), +v.volume, +v.avg_cost);
+      });
+    }
+    const out = {};
+    Object.entries(pos).forEach(([k, p]) => { out[k] = { shares: p.shares, cost: p.amount / p.shares }; });
+    return out;
+  }
+
+  function withPort(rows) {
+    const pos = port && port.pos;
+    const out = rows.map((r) => {
+      const p = pos && pos[r.symbol];
+      if (!p) return { ...r, p: null, p_cost: null, p_pl: null, p_value: null, p_weight: null, p_yoc: null, p_income: null };
+      return {
+        ...r, p,
+        p_cost: p.cost || null,
+        p_pl: p.cost ? (r.close / p.cost - 1) * 100 : null,
+        p_value: r.close * p.shares,
+        p_yoc: r.f_divlast && p.cost ? r.f_divlast / p.cost * 100 : null,
+        p_income: r.f_divlast ? r.f_divlast * p.shares : null,
+      };
+    });
+    const total = out.reduce((a, r) => a + (r.p_value || 0), 0);
+    out.forEach((r) => { r.p_weight = r.p_value && total ? r.p_value / total * 100 : null; });
+    return out;
+  }
+
+  function applyPort() {
+    state.rows = withPort(baseRows);
+    const on = !!(port && port.pos && Object.keys(port.pos).length);
+    document.body.classList.toggle("has-port", on);
+    $("#portBtnText").textContent = on ? `พอร์ตส่วนตัว (${Object.keys(port.pos).length})` : "พอร์ตส่วนตัว";
+    document.querySelectorAll(".popt").forEach((o) => (o.disabled = !on));
+    if (!on && state.heatKey.startsWith("p_")) { state.heatKey = "r1m"; $("#heatPeriod").value = "r1m"; }
+    if (!on && state.sort.startsWith("p_")) { state.sort = "score"; state.asc = false; }
+    const matched = on ? state.rows.filter((r) => r.p).length : 0;
+    $("#portStatus").textContent = on
+      ? `โหลดแล้ว ${Object.keys(port.pos).length} หุ้น จากไฟล์ ${port.source} (${port.loaded}) · ตรงกับหุ้นที่มีกราฟใน dashboard ${matched} ตัว`
+      : "ยังไม่ได้โหลดข้อมูล";
+  }
+
+  $("#portBtn").onclick = () => { $("#portDlg").hidden = false; };
+  $("#portDlg").addEventListener("click", (e) => { if (e.target.closest("[data-pclose]")) $("#portDlg").hidden = true; });
+  $("#portFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const pos = parsePortfolio(JSON.parse(await file.text()));
+      if (!Object.keys(pos).length) throw new Error("ไม่พบรายการหุ้นในไฟล์นี้");
+      port = { pos, source: file.name, loaded: new Date().toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) };
+      try { localStorage.setItem(PORT_KEY, JSON.stringify(port)); } catch (err) {}
+      applyPort();
+      render();
+    } catch (err) {
+      $("#portStatus").textContent = "อ่านไฟล์ไม่ได้: " + err.message;
+    }
+  });
+  $("#portClear").onclick = () => {
+    port = null;
+    try { localStorage.removeItem(PORT_KEY); } catch (e) {}
+    applyPort();
+    render();
+  };
 
   // ---------- theme ----------
   const themeKey = "trendboard-theme";
@@ -76,7 +161,7 @@
     if (v == null) return "var(--surface-2)";
     return `color-mix(in oklab, var(--seq) ${Math.round(Math.min(v / lim, 1) * 75)}%, var(--neutral))`;
   }
-  const HEAT_LIM = { chg: 5, r1w: 8, r1m: 15, r3m: 25, r6m: 35, ytd: 40, r1y: 50, vs_ma200: 25, f_yield: 8 };
+  const HEAT_LIM = { p_pl: 50, chg: 5, r1w: 8, r1m: 15, r3m: 25, r6m: 35, ytd: 40, r1y: 50, vs_ma200: 25, f_yield: 8 };
 
   function spark(vals, w = 92, h = 26) {
     if (!vals || vals.length < 2) return "";
@@ -125,7 +210,8 @@
   ]).then(([s, info]) => {
     summary = s;
     setInfo = info;
-    state.rows = s.rows.map((r) => withFund(r, info && info.rows[r.symbol]));
+    baseRows = s.rows.map((r) => withFund(r, info && info.rows[r.symbol]));
+    applyPort();
     const d = new Date(s.as_of + "T00:00:00");
     $("#asof").textContent = `ราคาปิด ${d.toLocaleDateString("th-TH", { dateStyle: "long" })} · ${s.rows.length} หุ้น · อัปเดตราคา ${s.generated.replace("T", " ")}` +
       (info ? ` · ข้อมูล SET ${info.generated.replace("T", " ")}` : "") +
@@ -256,6 +342,22 @@
     $("#breadthBar").onclick = (e) => { const d = e.target.closest("[data-k]"); if (d) setTrend(d.dataset.k); };
     $("#breadthLegend").innerHTML = TRENDS.map((t) =>
       `<li><span class="sw" style="--c:var(--t-${t.k})"></span>${t.label} <b>${counts[t.k]}</b></li>`).join("");
+    let vb = $("#breadthValue");
+    if (!vb) {
+      vb = document.createElement("div");
+      vb.id = "breadthValue";
+      $("#breadthLegend").after(vb);
+    }
+    const held = rows.filter((r) => r.p_value);
+    if (!held.length) vb.innerHTML = "";
+    else {
+      const tot = held.reduce((a, r) => a + r.p_value, 0);
+      const vals = Object.fromEntries(TRENDS.map((t) => [t.k, held.filter((r) => r.trend === t.k).reduce((a, r) => a + r.p_value, 0)]));
+      vb.innerHTML = `<div class="card-h vb-h"><h2>ตามมูลค่าที่ถือ</h2><span class="hint">🔒 ${big(tot)} บาท</span></div>
+        <div class="stack" role="img" aria-label="${TRENDS.map((t) => `${t.label} ${Math.round(vals[t.k] / tot * 100)}%`).join(", ")}">${TRENDS.filter((t) => vals[t.k]).map((t) =>
+          `<div data-k="${t.k}" class="${t.k === "strong_up" || t.k === "strong_down" ? "dark-ink" : ""}" style="flex:${vals[t.k]};background:var(--t-${t.k})" title="${t.label}: ${big(vals[t.k])} บาท (${nf(1).format(vals[t.k] / tot * 100)}%)">${vals[t.k] / tot > 0.07 ? Math.round(vals[t.k] / tot * 100) + "%" : ""}</div>`).join("")}</div>`;
+      vb.querySelector(".stack").onclick = (e) => { const d = e.target.closest("[data-k]"); if (d) setTrend(d.dataset.k); };
+    }
 
     const above = (key) => {
       const have = rows.filter((r) => r[key] != null);
@@ -281,6 +383,18 @@
         { k: "จ่ายปันผล (12 เดือน)", v: `${payers.length}`, s: `จาก ${rows.length} หุ้น · yield มัธยฐาน ${plainPct(ys[Math.floor(ys.length / 2)])}` },
         { k: "จ่ายต่อเนื่อง ≥ 5 ปี", v: `${rows.filter((r) => r.f_streak >= 5).length}`, s: "หุ้นปันผลสม่ำเสมอ" },
         { k: "เพิ่มทุนใน 3 ปี", v: `${rows.filter((r) => r.f && r.f.caps_3y.some((c) => c.type === "XR")).length}`, s: `XR · มีวอร์แรนต์ (XW) ${rows.filter((r) => r.f && r.f.caps_3y.some((c) => c.type === "XW")).length}` },
+      );
+    }
+    if (held.length) {
+      const tot = held.reduce((a, r) => a + r.p_value, 0);
+      const costTot = held.reduce((a, r) => a + (r.p.cost || 0) * r.p.shares, 0);
+      const pl = tot - costTot;
+      const inc = held.reduce((a, r) => a + (r.p_income || 0), 0);
+      const winners = held.filter((r) => r.p_pl > 0).length;
+      tiles.unshift(
+        { k: "🔒 มูลค่าตามราคาปิด", v: big(tot), s: `ทุนรวม ${big(costTot)} บาท` },
+        { k: "🔒 กำไร/ขาดทุนยังไม่รับรู้", v: `<span class="${cls(pl)}">${pl >= 0 ? "+" : "−"}${big(Math.abs(pl))}</span>`, s: `${pctFmt(costTot ? pl / costTot * 100 : null)} · กำไร ${winners}/${held.length} ตัว` },
+        { k: "🔒 ปันผลปีล่าสุด (ประมาณ)", v: big(inc), s: `${plainPct(tot ? inc / tot * 100 : null, 2)} ของมูลค่า · ${plainPct(costTot ? inc / costTot * 100 : null, 2)} ของทุน` },
       );
     }
     $("#tiles").innerHTML = tiles.map((t) => `<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="s">${t.s}</div></div>`).join("");
@@ -358,6 +472,9 @@
       <td class="${r.vol_ratio >= 2 ? "" : "muted"}">${r.vol_ratio == null ? "–" : (r.vol_ratio >= 2 ? "<b>" : "") + nf(1).format(r.vol_ratio) + "×" + (r.vol_ratio >= 2 ? "</b>" : "")}</td>
       <td class="${r.rsi >= 70 || r.rsi <= 30 ? "" : "muted"}">${r.rsi == null ? "–" : Math.round(r.rsi)}</td>
       <td class="${cls(r.rs3m)}">${pctFmt(r.rs3m)}</td>
+      <td class="pcol">${r.p ? priceFmt(r.p_cost) : ""}</td>
+      <td class="pcol ${cls(r.p_pl)}">${r.p ? pctFmt(r.p_pl) : ""}</td>
+      <td class="pcol">${r.p_weight == null ? "" : plainPct(r.p_weight, 1)}</td>
     </tr>`).join("");
   }
   $("#tbl tbody").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDetail(tr.dataset.sym); });
@@ -384,6 +501,8 @@
       <td class="l">${r.f ? capTags : "–"}</td>
       <td>${big(r.f_mcap)}</td>
       <td class="l sector">${esc(r.f_sector || "–")}</td>
+      <td class="pcol">${r.p ? plainPct(r.p_yoc, 2) : ""}</td>
+      <td class="pcol">${r.p && r.p_income ? nf(0).format(r.p_income) : ""}</td>
     </tr>`;
     }).join("");
   }
@@ -393,6 +512,7 @@
     const k = state.heatKey, lim = HEAT_LIM[k];
     const isSeq = k === "f_yield";
     const cell = (r) => `<div class="cell" data-sym="${esc(r.symbol)}" style="background:${isSeq ? seqBg(r[k], lim) : heatBg(r[k], lim)}" title="${esc(r.name)}"><b>${esc(r.symbol)}</b><span>${isSeq ? plainPct(r[k], 2) : pctFmt(r[k])}</span></div>`;
+    if (k.startsWith("p_")) rows = rows.filter((r) => r.p);
     const sorted = [...rows].sort((a, b) => (b[k] ?? -1e9) - (a[k] ?? -1e9));
     if (!state.bySector) { $("#heatView").innerHTML = `<div class="heat-grid">${sorted.map(cell).join("")}</div>`; return; }
     const groups = {};
@@ -439,6 +559,16 @@
       ["Vol / เฉลี่ย 20 วัน", r.vol_ratio == null ? "–" : nf(2).format(r.vol_ratio) + "×"],
       ["มูลค่าซื้อขายเฉลี่ย 20 วัน", big(r.value20) + " บาท"], ["เทียบตลาด 3M", pctFmt(r.rs3m), cls(r.rs3m)],
     ];
+    if (r.p) {
+      const need = r.p.cost ? (r.p.cost / r.close - 1) * 100 : null;
+      const plBaht = r.p_value - r.p.cost * r.p.shares;
+      stats.unshift(
+        ["🔒 ทุนเฉลี่ย", priceFmt(r.p.cost)], ["🔒 %P/L", pctFmt(r.p_pl), cls(r.p_pl)],
+        ["🔒 จำนวนหุ้น", nf(0).format(r.p.shares)], ["🔒 มูลค่า / น้ำหนัก", `${big(r.p_value)} · ${plainPct(r.p_weight, 1)}`],
+        ["🔒 กำไร/ขาดทุน (บาท)", `${plBaht >= 0 ? "+" : "−"}${big(Math.abs(plBaht))}`, cls(plBaht)],
+        ["🔒 ต้องขึ้นอีกเพื่อถึงทุน", need > 0 ? pctFmt(need) : "ถึงทุนแล้ว"],
+      );
+    }
     $("#dStats").innerHTML = stats.map(([k, v, c]) => `<div><div class="k">${k}</div><div class="v ${c || ""}">${v}</div></div>`).join("");
     $("#dFund").innerHTML = "";
     if (!keepRange) {
@@ -579,9 +709,20 @@
       localization: { locale: "en-GB" },
     });
     chartState.chart = chart;
+    const pr = state.rows.find((x) => x.symbol === chartState.sym);
+    const cost = pr && pr.p && pr.p.cost;
     const candle = chart.addCandlestickSeries({
       upColor: up, downColor: dn, borderVisible: false, wickUpColor: up, wickDownColor: dn,
       priceLineVisible: false,
+      // keep the private cost line in view even when it is far from the visible prices
+      autoscaleInfoProvider: (orig) => {
+        const res = orig();
+        if (res && res.priceRange && cost) {
+          res.priceRange.minValue = Math.min(res.priceRange.minValue, cost);
+          res.priceRange.maxValue = Math.max(res.priceRange.maxValue, cost);
+        }
+        return res;
+      },
     });
     candle.setData(bars.map((b) => ({ time: b[0], open: b[1], high: b[2], low: b[3], close: b[4] })));
     for (const [n, v] of [[20, "--ma20"], [50, "--ma50"], [200, "--ma200"]]) {
@@ -608,6 +749,9 @@
       return { time: t, position: "aboveBar", shape: "circle", color: css(caInfo(main.type).c), text: [...new Set(evs.map((e) => caInfo(e.type).m))].join("") };
     });
     candle.setMarkers(markers);
+    if (cost) {
+      candle.createPriceLine({ price: cost, color: css("--ink-2"), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: "ทุน" });
+    }
     fitRange();
 
     const idx = Object.fromEntries(bars.map((b, i) => [b[0], i]));
