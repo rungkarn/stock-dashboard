@@ -91,8 +91,13 @@ class TestHelpers(unittest.TestCase):
     def test_to_bars_skips_nulls(self):
         res = {"meta": {"gmtoffset": 25200}, "timestamp": [1760000000, 1760086400],
                "indicators": {"quote": [{"open": [1, None], "high": [1, 2], "low": [1, 2], "close": [1, None], "volume": [5, 6]}]}}
-        _, bars = fp.to_bars(res)
+        _, bars, divs = fp.to_bars(res)
         self.assertEqual(len(bars), 1)
+        self.assertEqual(divs, {})
+
+    def test_merge_divs_dedupes_repeats(self):
+        out = fp.merge_divs({"2022-01-28": 0.3}, {"2022-02-01": 0.3, "2023-02-03": 0.3})
+        self.assertEqual(out, [["2022-01-28", 0.3], ["2023-02-03", 0.3]])
 
 
 class TestDividends(unittest.TestCase):
@@ -141,6 +146,28 @@ class TestBacktest(unittest.TestCase):
         self.assertAlmostEqual(bt.spearman([1, 2, 3, 4], [10, 20, 30, 40]), 1.0)
         self.assertAlmostEqual(bt.spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1.0)
         self.assertIsNone(bt.spearman([1, 1, 1], [1, 2, 3]))
+
+    def test_dividend_booking_and_total_return(self):
+        dates = ["2024-01-01", "2024-01-02", "2024-01-04", "2024-01-05"]
+        closes = [10.0, 10.0, 9.5, 9.5]
+        per_bar = bt.dividends_on_bars(dates, closes, [("2024-01-03", 0.5), ("2023-12-01", 1.0)])
+        self.assertEqual(per_bar, [0.0, 0.0, 0.5, 0.0])   # XD on a holiday -> next bar; pre-history ignored
+        tr = bt.total_return_index(closes, per_bar)
+        self.assertAlmostEqual(tr[-1], 10.0)               # price drop on XD offset by the dividend
+
+    def test_dividend_cap(self):
+        per_bar = bt.dividends_on_bars(["a", "b"], [1.0, 1.0], [("b", 0.5)])
+        self.assertEqual(per_bar, [0.0, 0.0])              # 50% of price -> treated as data mismatch
+
+    def test_trailing_yield(self):
+        dates = ["2024-01-01", "2024-06-01", "2025-01-02"]
+        y = bt.trailing_yield(dates, [10.0, 10.0, 10.0], [0.0, 0.5, 0.0])
+        self.assertEqual(y, [0.0, 5.0, 5.0])
+        y = bt.trailing_yield(dates + ["2025-06-02"], [10.0] * 4, [0.0, 0.5, 0.0, 0.0])
+        self.assertEqual(y[-1], 0.0)                       # dropped out of the 365-day window
+
+    def test_max_drawdown(self):
+        self.assertAlmostEqual(bt.max_drawdown([1.0, 1.2, 0.6, 1.5]), -0.5)
 
     def test_stats(self):
         st = bt.stats([0.1, -0.1, 0.2], [0.05, -0.2, 0.1])

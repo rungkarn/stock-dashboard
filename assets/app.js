@@ -266,10 +266,11 @@
   });
 
   let bt = null;
-  const btState = { h: "63", u: "liquid" };
+  const btState = { h: "63", u: "liquid", ret: "tr", on: new Set(["all", "above200", "yield4_above200", "score5", "bench"]) };
   fetch("data/backtest.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).then((j) => { bt = j; renderBacktest(); }).catch(() => {});
   segHandlerBt("#btHorizon", "h");
   segHandlerBt("#btUniverse", "u");
+  segHandlerBt("#btRet", "ret");
   function segHandlerBt(id, key) {
     $(id).addEventListener("click", (e) => {
       const b = e.target.closest("button");
@@ -283,12 +284,12 @@
   function renderBacktest(barsOnly) {
     if (!bt) return;
     $("#btCard").hidden = false;
-    const H = bt.horizons[btState.h][btState.u];
+    const H = (btState.ret === "px" && bt.horizons_price ? bt.horizons_price : bt.horizons)[btState.h][btState.u];
     $("#btPeriod").textContent = `${bt.period[0]} → ${bt.period[1]} · ${H.n_symbols} หุ้น · อัปเดต ${bt.generated.replace("T", " ")}`;
     const su = H.groups.strong_up, sd = H.groups.strong_down;
     const ic = H.ic_mean;
     const power = ic == null ? "ไม่พอประเมิน" : Math.abs(ic) < 0.02 ? "แทบไม่มี" : Math.abs(ic) < 0.05 ? "อ่อนมาก" : Math.abs(ic) < 0.1 ? "อ่อน–ปานกลาง" : "ดี";
-    const hz = btState.h === "21" ? "1 เดือน" : "3 เดือน";
+    const hz = (btState.h === "21" ? "1 เดือน" : "3 เดือน") + (btState.ret === "px" ? " (ราคาอย่างเดียว)" : " (รวมปันผล)");
     const spread = su.n && sd.n ? su.mean - sd.mean : null;
     $("#btVerdict").innerHTML = `ผลตอบแทน ${hz} ถัดไป: กลุ่ม<b>ขาขึ้นแรง</b>เฉลี่ย <b class="${cls(su.mean)}">${pctFmt(su.mean)}</b> เทียบ<b>ขาลงแรง</b> <b class="${cls(sd.mean)}">${pctFmt(sd.mean)}</b>` +
       (spread == null ? "" : ` (ต่างกัน ${spread >= 0 ? "+" : "−"}${nf(1).format(Math.abs(spread))} จุด)`) +
@@ -307,16 +308,39 @@
   const GROUPS_BT = ["strong_up", "up", "side", "down", "strong_down"];
 
   let btChart = null;
+  // colour follows the rule (fixed order), never its rank
+  const RULE_COLORS = { all: "--ink-2", bench: "--accent", score5: "--t-strong_up", score4: "--rule-1", not_down: "--rule-2", above200: "--rule-3",
+    yield4: "--rule-4", yield4_above200: "--rule-5", yield4_not_down: "--rule-6", down: "--t-strong_down" };
+  function renderRules() {
+    const R = bt.rules;
+    if (!R) return;
+    const items = Object.entries(R.items);
+    const bestK = items.filter(([k]) => k !== "bench").sort((a, b) => b[1].total - a[1].total)[0][0];
+    $("#btRulesHint").textContent = `${R.months} เดือน · ${R.dates[0]} → ${R.dates[R.dates.length - 1]}`;
+    $("#btRules").innerHTML = `<thead><tr><th class="l">กฎ</th><th>ผลตอบแทนรวม</th><th>ต่อปี</th><th title="จุดต่ำสุดเทียบจุดสูงสุดก่อนหน้า">ลดลงหนักสุด</th><th>ถือเฉลี่ย</th><th>เดือนที่ชนะ TDEX</th></tr></thead><tbody>` +
+      items.map(([k, v]) => `<tr data-rule="${k}" class="${btState.on.has(k) ? "on" : ""}${k === "bench" ? " bench" : ""}">
+        <td class="l"><i class="ln" style="--c:var(${RULE_COLORS[k] || "--ink-2"})"></i> ${esc(v.label)}${k === bestK ? ' <span class="ix">ดีสุด</span>' : ""}</td>
+        <td class="${cls(v.total)}"><b>${pctFmt(v.total)}</b></td><td class="${cls(v.cagr)}">${pctFmt(v.cagr)}</td>
+        <td class="neg">${pctFmt(v.mdd)}</td><td>${v.avg_n == null ? "–" : nf(1).format(v.avg_n) + " ตัว"}${v.avg_n != null && v.avg_n < 8 ? ' <span class="ix" title="ถือเฉลี่ยน้อยกว่า 8 ตัว ผลขึ้นกับหุ้นไม่กี่ตัว อาจเป็นความบังเอิญ">⚠ ถือน้อย</span>' : ""}</td>
+        <td>${v.beat_bench == null ? "–" : v.beat_bench + "%"}</td></tr>`).join("") + "</tbody>";
+  }
+  $("#btRules").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-rule]");
+    if (!tr) return;
+    const k = tr.dataset.rule;
+    btState.on.has(k) ? btState.on.delete(k) : btState.on.add(k);
+    renderRules();
+    drawBtChart();
+  });
+
   function drawBtChart() {
-    const c = bt.curve;
-    if (!c || !c.dates.length) return;
-    const series = [
-      { k: "up", label: "ซื้อเฉพาะขาขึ้นแรง (5–6)", color: css("--t-strong_up") },
-      { k: "all", label: "ทุกตัว", color: css("--ink-2") },
-      { k: "down", label: "เฉพาะขาลง (0–1)", color: css("--t-strong_down") },
-      { k: "bench", label: "TDEX (SET50)", color: css("--accent") },
-    ];
-    $("#btLegend").innerHTML = series.map((s) => `<li><i class="ln" style="--c:${s.color}"></i>${s.label} <b class="${cls(c[s.k][c[s.k].length - 1])}">${pctFmt(c[s.k][c[s.k].length - 1])}</b></li>`).join("");
+    renderRules();
+    const R = bt.rules;
+    if (!R || !R.dates.length) return;
+    const c = Object.fromEntries(Object.entries(R.items).map(([k, v]) => [k, v.curve]));
+    c.dates = R.dates;
+    const series = Object.entries(R.items).filter(([k]) => btState.on.has(k)).map(([k, v]) => ({ k, label: v.label, color: css(RULE_COLORS[k] || "--ink-2") }));
+    $("#btLegend").innerHTML = series.map((s) => `<li><i class="ln" style="--c:${s.color}"></i>${esc(s.label)} <b class="${cls(c[s.k][c[s.k].length - 1])}">${pctFmt(c[s.k][c[s.k].length - 1])}</b></li>`).join("");
     const el = $("#btChart");
     if (btChart) btChart.remove();
     btChart = LightweightCharts.createChart(el, {

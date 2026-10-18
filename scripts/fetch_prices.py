@@ -48,7 +48,7 @@ def fetch_chart(sym, rng, session, tries=4):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_ticker(sym)}"
     for i in range(tries):
         try:
-            r = session.get(url, params={"range": rng, "interval": "1d"}, headers=UA, timeout=30)
+            r = session.get(url, params={"range": rng, "interval": "1d", "events": "div"}, headers=UA, timeout=30)
             if r.status_code == 404:
                 return None
             if r.status_code == 429 or r.status_code >= 500:
@@ -75,7 +75,25 @@ def to_bars(res):
         day = dt.datetime.fromtimestamp(ts + off, dt.timezone.utc).date().isoformat()
         r4 = lambda x: round(x, 4)
         bars[day] = [day, r4(o), r4(h), r4(l), r4(c), int(v or 0)]
-    return meta, bars
+    divs = {}
+    for d in (res.get("events") or {}).get("dividends", {}).values():
+        if d.get("amount") and d.get("date"):
+            day = dt.datetime.fromtimestamp(d["date"] + off, dt.timezone.utc).date().isoformat()
+            divs[day] = round(d["amount"], 6)
+    return meta, bars, divs
+
+
+def merge_divs(old, new):
+    """Yahoo dividends (date -> amount); drop a repeat of the same amount within 7 days (Yahoo
+    sometimes lists one payment twice)."""
+    allv = dict(old or {})
+    allv.update(new)
+    out = []
+    for day in sorted(allv):
+        if out and out[-1][1] == allv[day] and                 (dt.date.fromisoformat(day) - dt.date.fromisoformat(out[-1][0])).days <= 7:
+            continue
+        out.append([day, allv[day]])
+    return out
 
 
 def update_symbol(sym, full, session):
@@ -84,7 +102,7 @@ def update_symbol(sym, full, session):
     res = fetch_chart(sym, FULL_RANGE if (full or old is None) else INC_RANGE, session)
     if res is None:
         return old, False
-    meta, new = to_bars(res)
+    meta, new, new_divs = to_bars(res)
     merged = {b[0]: b for b in (old or {}).get("bars", [])}
     merged.update(new)
     cutoff = (dt.date.today() - dt.timedelta(days=KEEP_DAYS)).isoformat()
@@ -94,6 +112,7 @@ def update_symbol(sym, full, session):
         "name": meta.get("longName") or meta.get("shortName") or (old or {}).get("name") or sym,
         "currency": meta.get("currency", "THB"),
         "bars": bars,
+        "divs": merge_divs({d: a for d, a in (old or {}).get("divs", [])}, new_divs),
     }
     path.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     return doc, True
