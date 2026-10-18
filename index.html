@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Trend Board</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>แนวโน้มหุ้นในพอร์ต</h1>
+    <p class="sub" id="asof">กำลังโหลด…</p>
+  </div>
+  <button class="ghost" id="themeBtn" title="สลับโหมดสว่าง/มืด" aria-label="สลับโหมดสว่าง/มืด">◐</button>
+</header>
+
+<main>
+  <section class="overview">
+    <div class="card breadth">
+      <div class="card-h">
+        <h2>ภาพรวมแนวโน้ม</h2>
+        <span class="hint" id="breadthCount"></span>
+      </div>
+      <div class="stack" id="breadthBar" role="img"></div>
+      <ul class="legend" id="breadthLegend"></ul>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-h">
+      <h2>สัญญาณล่าสุด</h2>
+      <span class="hint">คลิกชื่อหุ้นเพื่อดูกราฟ</span>
+    </div>
+    <div class="signals" id="signals"></div>
+  </section>
+
+  <section class="card">
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="ค้นหาหุ้น…" autocomplete="off">
+      <div class="seg" id="trendFilter"></div>
+      <div class="seg" id="groupFilter">
+        <button data-v="all" class="on">ทั้งหมด</button>
+        <button data-v="holding">ที่ถือ</button>
+        <button data-v="watch">Watchlist</button>
+      </div>
+      <div class="seg" id="viewToggle">
+        <button data-v="table" class="on">ตาราง</button>
+        <button data-v="heat">Heatmap</button>
+      </div>
+      <label class="heat-period" id="heatPeriodWrap" hidden>
+        ช่วง
+        <select id="heatPeriod">
+          <option value="chg">1 วัน</option>
+          <option value="r1w">1 สัปดาห์</option>
+          <option value="r1m" selected>1 เดือน</option>
+          <option value="r3m">3 เดือน</option>
+          <option value="r6m">6 เดือน</option>
+          <option value="ytd">YTD</option>
+          <option value="r1y">1 ปี</option>
+          <option value="vs_ma200">vs MA200</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="table-wrap" id="tableView">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="symbol" class="l">หุ้น</th>
+          <th data-k="r3m" class="nosort spark-h">3 เดือน</th>
+          <th data-k="close">ราคา</th>
+          <th data-k="chg">1D</th>
+          <th data-k="r1w">1W</th>
+          <th data-k="r1m">1M</th>
+          <th data-k="r3m">3M</th>
+          <th data-k="r1y">1Y</th>
+          <th data-k="score" class="l">แนวโน้ม</th>
+          <th data-k="vs_ma200">vs MA200</th>
+          <th data-k="pos52" class="l">ช่วง 52 สัปดาห์</th>
+          <th data-k="vol_ratio">Vol / เฉลี่ย</th>
+          <th data-k="rsi">RSI</th>
+          <th data-k="rs3m">เทียบตลาด 3M</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="heat" id="heatView" hidden></div>
+    <p class="empty" id="empty" hidden>ไม่พบหุ้นตามเงื่อนไข</p>
+  </section>
+
+  <details class="card howto">
+    <summary>วิธีอ่าน dashboard นี้</summary>
+    <ul>
+      <li><b>คะแนนแนวโน้ม 0–6</b> นับจาก: ราคา &gt; MA20, ราคา &gt; MA50, ราคา &gt; MA200, MA20 &gt; MA50, MA50 &gt; MA200 และ MA50 ชันขึ้น (เทียบ 10 วันก่อน). 5–6 = ขาขึ้นแรง, 4 = ขาขึ้น, 2–3 = ทรงตัว, 1 = ขาลง, 0 = ขาลงแรง</li>
+      <li><b>ช่วง 52 สัปดาห์</b> จุดบนแถบคือราคาปัจจุบันเทียบต่ำสุด (ซ้าย) – สูงสุด (ขวา) ของปี</li>
+      <li><b>Vol / เฉลี่ย</b> ปริมาณวันล่าสุด ÷ เฉลี่ย 20 วัน; ≥ 2 เท่า = มีแรงซื้อขายผิดปกติ ควรดูคู่กับทิศราคา</li>
+      <li><b>RSI 14</b> &gt; 70 ร้อนแรง/ซื้อมาก, &lt; 30 ขายมากเกินไป</li>
+      <li><b>เทียบตลาด 3M</b> ผลตอบแทน 3 เดือนลบผลตอบแทน TDEX (ETF ที่อิง SET50) — บวก = ชนะตลาด</li>
+      <li><b>Golden / Death cross</b> MA50 ตัด MA200 ขึ้น/ลงในช่วง 10 วันทำการล่าสุด</li>
+      <li>ข้อมูลราคาปิดรายวันจาก Yahoo Finance อัปเดตอัตโนมัติ จ.–ศ. หลังตลาดปิด — เป็นข้อมูลประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน</li>
+    </ul>
+  </details>
+</main>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-bg" data-close></div>
+  <section class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+    <header class="drawer-h">
+      <div>
+        <h2 id="dTitle"></h2>
+        <p class="sub" id="dName"></p>
+      </div>
+      <button class="ghost" data-close aria-label="ปิด">✕</button>
+    </header>
+    <div class="d-price" id="dPrice"></div>
+    <div class="toolbar tight">
+      <div class="seg" id="rangeSeg">
+        <button data-v="63">3M</button>
+        <button data-v="126">6M</button>
+        <button data-v="252" class="on">1Y</button>
+        <button data-v="9999">ทั้งหมด</button>
+      </div>
+      <ul class="legend inline">
+        <li><i class="ln" style="--c:var(--ma20)"></i>MA20</li>
+        <li><i class="ln" style="--c:var(--ma50)"></i>MA50</li>
+        <li><i class="ln" style="--c:var(--ma200)"></i>MA200</li>
+      </ul>
+    </div>
+    <div class="ohlc" id="ohlc"></div>
+    <div id="chart" class="chart"></div>
+    <div class="stats" id="dStats"></div>
+  </section>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
