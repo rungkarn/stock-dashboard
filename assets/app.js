@@ -134,6 +134,7 @@
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem(themeKey, next); } catch (e) {}
     render();
+    if (bt) renderBacktest();
     if (chartState.sym) openDetail(chartState.sym, true);
   };
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -209,6 +210,131 @@
   const idxTag = (f) => f && f.set50 ? `<span class="ix">SET50</span>` : f && f.set100 ? `<span class="ix">SET100</span>` : "";
 
   // ---------- load ----------
+  // ---------- weekly summary ----------
+  let weekly = null;
+  fetch("data/weekly.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).then((j) => { weekly = j; renderWeekly(); }).catch(() => {});
+
+  function renderWeekly() {
+    if (!weekly || !summary) return;
+    const w = weekly;
+    $("#weeklyCard").hidden = false;
+    $("#wTitle").textContent = `สรุปสัปดาห์ ${thDate(w.week[0], { day: "numeric", month: "short" })} – ${thDate(w.week[1], { day: "numeric", month: "short" })}`;
+    const a = w.above50;
+    $("#wHead").innerHTML = `หุ้นเหนือ MA50 <b>${a.now}%</b> (สัปดาห์ก่อน ${a.prev}%) · ขึ้น <b class="pos">${w.up_count}</b> ลง <b class="neg">${w.down_count}</b> จาก ${w.n} ตัว · มัธยฐาน 1 สัปดาห์ ${pctFmt(w.median_r1w)} · TDEX <span class="${cls(w.bench.r1w)}">${pctFmt(w.bench.r1w)}</span>`;
+    $("#wBreadth").innerHTML = TRENDS.map((t) => {
+      const d = w.breadth.now[t.k] - w.breadth.prev[t.k];
+      return `<span class="w-b"><span class="sw" style="--c:var(--t-${t.k})"></span>${t.label} <b>${w.breadth.now[t.k]}</b> <small class="${!d || t.k === "side" ? "muted" : (d > 0) === (t.k === "strong_up" || t.k === "up") ? "pos" : "neg"}">${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}</small></span>`;
+    }).join("");
+    const held = (sym) => state.rows.find((r) => r.symbol === sym);
+    const item = (x) => {
+      const r = held(x.symbol);
+      const wt = r && r.p_weight != null ? `<span class="ix">🔒 ${plainPct(r.p_weight, 1)}</span>` : "";
+      return `<li data-sym="${esc(x.symbol)}"><b>${esc(x.symbol)}</b>${wt} <span class="hint">${x.trend ? TREND_LABEL[x.trend] : ""} · 1W ${pctFmt(x.r1w)}</span><br><span class="w-r">${x.reasons.map(esc).join(" · ")}</span></li>`;
+    };
+    const sortByWeight = (list) => port ? [...list].sort((a, b) => ((held(b.symbol) || {}).p_weight || 0) - ((held(a.symbol) || {}).p_weight || 0) || b.reasons.length - a.reasons.length) : list;
+    const watch = sortByWeight(w.watch), strong = sortByWeight(w.strong);
+    const LIMIT = 8;
+    const list = (id, arr) => {
+      $(id).innerHTML = arr.slice(0, LIMIT).map(item).join("") || `<li class="muted">ไม่มี</li>`;
+      if (arr.length > LIMIT) $(id).insertAdjacentHTML("beforeend", `<li class="more-li"><button class="linkbtn" data-all="${id}">แสดงทั้งหมด ${arr.length} ตัว</button></li>`);
+      $(id).dataset.full = JSON.stringify(arr);
+    };
+    list("#wWatch", watch);
+    list("#wStrong", strong);
+    const wsum = port ? watch.reduce((s, x) => s + ((held(x.symbol) || {}).p_weight || 0), 0) : null;
+    $("#wWatchN").textContent = `${w.watch.length} ตัว` + (wsum ? ` · 🔒 รวม ${nf(1).format(wsum)}% ของพอร์ต` : "");
+    $("#wStrongN").textContent = `${w.strong.length} ตัว`;
+    const chips = (arr) => arr.map((x) => `<button class="chip" data-sym="${esc(x.symbol)}">${esc(x.symbol)}<small class="${cls(x.r1w)}">${pctFmt(x.r1w)}</small></button>`).join("");
+    $("#wMovers").innerHTML = `<div><span class="hint">บวกมากสุด</span> ${chips(w.top)}</div><div><span class="hint">ลบมากสุด</span> ${chips(w.bottom)}</div>
+      <p class="hint">นับเฉพาะหุ้นราคา ≥ 0.50 บาท และซื้อขายเฉลี่ย ≥ 1 ล้านบาท/วัน (${w.movers_n} ตัว) — หุ้นราคาต่ำมาก 1 ช่องราคาก็เปลี่ยนได้ 20–50%</p>`;
+  }
+  $("#weeklyCard").addEventListener("click", (e) => {
+    const more = e.target.closest("[data-all]");
+    if (more) {
+      const ul = $(more.dataset.all);
+      const arr = JSON.parse(ul.dataset.full);
+      const held = (sym) => state.rows.find((r) => r.symbol === sym);
+      ul.innerHTML = arr.map((x) => {
+        const r = held(x.symbol);
+        const wt = r && r.p_weight != null ? `<span class="ix">🔒 ${plainPct(r.p_weight, 1)}</span>` : "";
+        return `<li data-sym="${esc(x.symbol)}"><b>${esc(x.symbol)}</b>${wt} <span class="hint">${x.trend ? TREND_LABEL[x.trend] : ""} · 1W ${pctFmt(x.r1w)}</span><br><span class="w-r">${x.reasons.map(esc).join(" · ")}</span></li>`;
+      }).join("");
+      return;
+    }
+    const b = e.target.closest("[data-sym]");
+    if (b) openDetail(b.dataset.sym);
+  });
+
+  let bt = null;
+  const btState = { h: "63", u: "liquid" };
+  fetch("data/backtest.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).then((j) => { bt = j; renderBacktest(); }).catch(() => {});
+  segHandlerBt("#btHorizon", "h");
+  segHandlerBt("#btUniverse", "u");
+  function segHandlerBt(id, key) {
+    $(id).addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      btState[key] = b.dataset.v;
+      renderBacktest(true);
+    });
+  }
+
+  function renderBacktest(barsOnly) {
+    if (!bt) return;
+    $("#btCard").hidden = false;
+    const H = bt.horizons[btState.h][btState.u];
+    $("#btPeriod").textContent = `${bt.period[0]} → ${bt.period[1]} · ${H.n_symbols} หุ้น · อัปเดต ${bt.generated.replace("T", " ")}`;
+    const su = H.groups.strong_up, sd = H.groups.strong_down;
+    const ic = H.ic_mean;
+    const power = ic == null ? "ไม่พอประเมิน" : Math.abs(ic) < 0.02 ? "แทบไม่มี" : Math.abs(ic) < 0.05 ? "อ่อนมาก" : Math.abs(ic) < 0.1 ? "อ่อน–ปานกลาง" : "ดี";
+    const hz = btState.h === "21" ? "1 เดือน" : "3 เดือน";
+    const spread = su.n && sd.n ? su.mean - sd.mean : null;
+    $("#btVerdict").innerHTML = `ผลตอบแทน ${hz} ถัดไป: กลุ่ม<b>ขาขึ้นแรง</b>เฉลี่ย <b class="${cls(su.mean)}">${pctFmt(su.mean)}</b> เทียบ<b>ขาลงแรง</b> <b class="${cls(sd.mean)}">${pctFmt(sd.mean)}</b>` +
+      (spread == null ? "" : ` (ต่างกัน ${spread >= 0 ? "+" : "−"}${nf(1).format(Math.abs(spread))} จุด)`) +
+      ` · IC เฉลี่ย <b>${ic == null ? "–" : nf(3).format(ic)}</b> (วันที่ IC เป็นบวก ${plainPct(H.ic_pos, 0)}) → พลังทำนาย<b>${power}</b>`;
+    const max = Math.max(1, ...GROUPS_BT.map((g) => Math.abs(H.groups[g].mean || 0)));
+    $("#btBars").innerHTML = GROUPS_BT.map((g) => {
+      const s = H.groups[g];
+      if (!s.n) return "";
+      const w = Math.abs(s.mean) / max * 50;
+      return `<div class="bt-row"><span class="bt-l"><span class="sw" style="--c:var(--t-${g})"></span>${TREND_LABEL[g]}</span>
+        <span class="bt-track"><i class="bt-zero"></i><i class="bt-bar" style="background:var(--t-${g});${s.mean >= 0 ? `left:50%;width:${w}%` : `left:${50 - w}%;width:${w}%`}"></i></span>
+        <span class="bt-v"><b class="${cls(s.mean)}">${pctFmt(s.mean)}</b> <small>มัธยฐาน ${pctFmt(s.median)} · ขึ้น ${plainPct(s.hit, 0)} ของครั้ง · เทียบ TDEX ${pctFmt(s.ex_mean)} · n=${nf(0).format(s.n)}</small></span></div>`;
+    }).join("");
+    if (!barsOnly) drawBtChart();
+  }
+  const GROUPS_BT = ["strong_up", "up", "side", "down", "strong_down"];
+
+  let btChart = null;
+  function drawBtChart() {
+    const c = bt.curve;
+    if (!c || !c.dates.length) return;
+    const series = [
+      { k: "up", label: "ซื้อเฉพาะขาขึ้นแรง (5–6)", color: css("--t-strong_up") },
+      { k: "all", label: "ทุกตัว", color: css("--ink-2") },
+      { k: "down", label: "เฉพาะขาลง (0–1)", color: css("--t-strong_down") },
+      { k: "bench", label: "TDEX (SET50)", color: css("--accent") },
+    ];
+    $("#btLegend").innerHTML = series.map((s) => `<li><i class="ln" style="--c:${s.color}"></i>${s.label} <b class="${cls(c[s.k][c[s.k].length - 1])}">${pctFmt(c[s.k][c[s.k].length - 1])}</b></li>`).join("");
+    const el = $("#btChart");
+    if (btChart) btChart.remove();
+    btChart = LightweightCharts.createChart(el, {
+      autoSize: true,
+      layout: { background: { color: "transparent" }, textColor: css("--muted"), fontFamily: css("--font"), fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: css("--grid") } },
+      rightPriceScale: { borderVisible: false },
+      timeScale: { borderVisible: false },
+      handleScroll: false, handleScale: false,
+      localization: { locale: "en-GB", priceFormatter: (v) => (v > 0 ? "+" : "") + v.toFixed(0) + "%" },
+    });
+    series.forEach((s) => {
+      const ls = btChart.addLineSeries({ color: s.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: "" });
+      ls.setData(c.dates.map((d, i) => ({ time: d, value: c[s.k][i] })));
+    });
+    btChart.timeScale().fitContent();
+  }
+
   Promise.all([
     fetch("data/summary.json", { cache: "no-cache" }).then((r) => r.json()),
     fetch("data/set_info.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -319,6 +445,7 @@
     renderSignals();
     renderCalendar();
     renderIncome();
+    renderWeekly();
     const rows = filtered();
     const k = state.sort, dir = state.asc ? 1 : -1;
     rows.sort((a, b) => {

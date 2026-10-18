@@ -35,6 +35,20 @@
     <div class="tiles" id="tiles"></div>
   </section>
 
+  <section class="card" id="weeklyCard" hidden>
+    <div class="card-h">
+      <h2 id="wTitle">สรุปสัปดาห์</h2>
+      <a class="hint" href="https://github.com/rungkarn/stock-dashboard/blob/main/data/weekly.md" target="_blank" rel="noopener">ฉบับข้อความ ↗</a>
+    </div>
+    <p class="verdict" id="wHead"></p>
+    <div class="w-breadth" id="wBreadth"></div>
+    <div class="w-cols">
+      <div><h3 class="sec">⚠️ ตัวที่ต้องระวัง <span class="hint" id="wWatchN"></span></h3><ul class="w-list" id="wWatch"></ul></div>
+      <div><h3 class="sec">💪 ตัวที่แข็งขึ้น <span class="hint" id="wStrongN"></span></h3><ul class="w-list" id="wStrong"></ul></div>
+    </div>
+    <div class="w-movers" id="wMovers"></div>
+  </section>
+
   <section class="card" id="incomeCard" hidden>
     <div class="card-h">
       <h2>🔒 ปันผลที่คาดว่าจะได้รับ 12 เดือนข้างหน้า</h2>
@@ -145,6 +159,39 @@
     </div>
     <div class="heat" id="heatView" hidden></div>
     <p class="empty" id="empty" hidden>ไม่พบหุ้นตามเงื่อนไข</p>
+  </section>
+
+  <section class="card" id="btCard" hidden>
+    <div class="card-h">
+      <h2>Backtest: คะแนนแนวโน้มทำนายผลตอบแทนได้แค่ไหน?</h2>
+      <span class="hint" id="btPeriod"></span>
+    </div>
+    <div class="toolbar">
+      <div class="seg" id="btHorizon">
+        <button data-v="21">1 เดือนถัดไป</button>
+        <button data-v="63" class="on">3 เดือนถัดไป</button>
+      </div>
+      <div class="seg" id="btUniverse">
+        <button data-v="liquid" class="on">หุ้นสภาพคล่องดี</button>
+        <button data-v="all">ทุกตัว</button>
+      </div>
+    </div>
+    <p class="verdict" id="btVerdict"></p>
+    <div class="bt-bars" id="btBars"></div>
+    <h3 class="sec">ถ้าซื้อตามกลุ่มแนวโน้ม ปรับพอร์ตทุกเดือน <span class="hint">ผลตอบแทนสะสม % · หุ้นสภาพคล่องดี ถือเท่ากันทุกตัว · ไม่รวมปันผลและค่าธรรมเนียม</span></h3>
+    <ul class="legend inline" id="btLegend"></ul>
+    <div id="btChart" class="chart small"></div>
+    <details class="caveat">
+      <summary>ข้อจำกัดที่ต้องรู้ก่อนเชื่อผลนี้</summary>
+      <ul>
+        <li><b>Survivorship / selection bias:</b> ทดสอบเฉพาะหุ้นที่ถือ<b>ตอนนี้</b> ซึ่งรวมตัวที่ซื้อหลังราคาลงและยังไม่ได้ขาย ทำให้ผลรวมทุกกลุ่มติดลบมากกว่าตลาด — ใช้เปรียบเทียบ<b>ระหว่างกลุ่ม</b> ไม่ใช่ประเมินว่าพอร์ตจะได้เท่าไร</li>
+        <li>ข้อมูลราคา ~5 ปี (เริ่มนับหลังมี MA200 ครบ) ช่วงเดียวของตลาด ผลอาจต่างในภาวะตลาดอื่น</li>
+        <li>ตัวอย่างทุก 5 วันทำการ ช่วงถือ 1–3 เดือนจึงซ้อนกัน จำนวน n ดูมากกว่าข้อมูลอิสระจริง</li>
+        <li>ราคาไม่รวมปันผล (หุ้นปันผลสูงจะดูแย่กว่าจริง) และไม่หักค่าคอมมิชชั่น/ภาษี/สเปรด</li>
+        <li>"สภาพคล่องดี" = มูลค่าซื้อขายเฉลี่ย 20 วัน ≥ 5 ล้านบาท ณ วันนั้น — หุ้นราคาต่ำมากมีช่วงราคา (tick) กว้าง ทำให้ % เหวี่ยงแรงและบิดค่าเฉลี่ย</li>
+        <li>IC = ค่าสหสัมพันธ์อันดับ (Spearman) ระหว่างคะแนนกับผลตอบแทนถัดไปของทุกหุ้นในวันเดียวกัน แล้วเฉลี่ยทุกวัน: 0 = ทำนายไม่ได้, 0.05–0.10 = อ่อนแต่มีประโยชน์ในเชิงสถิติ, &gt; 0.10 = ดี</li>
+      </ul>
+    </details>
   </section>
 
   <details class="card howto">

@@ -318,3 +318,37 @@ table.ev tr { cursor: default; }
 .income-list table { margin-top: 10px; }
 .income-list tr { cursor: pointer; }
 .income-list tr.est td { color: var(--ink-2); }
+
+/* ---------- backtest ---------- */
+.verdict { margin: 0 0 12px; line-height: 1.7; }
+.bt-bars { display: grid; gap: 6px; }
+.bt-row { display: grid; grid-template-columns: 100px minmax(120px, 1fr) minmax(0, 1.6fr); gap: 10px; align-items: center; font-size: 13px; }
+.bt-l { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.bt-track { position: relative; height: 14px; }
+.bt-zero { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--axis); }
+.bt-bar { position: absolute; top: 2px; height: 10px; border-radius: 3px; }
+.bt-v small { color: var(--muted); margin-left: 4px; }
+.chart.small { height: 260px; }
+.caveat { margin-top: 12px; }
+.caveat summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.caveat ul { color: var(--ink-2); font-size: 13px; padding-left: 20px; }
+@media (max-width: 640px) {
+  .bt-row { grid-template-columns: 84px minmax(0, 1fr); }
+  .bt-v { grid-column: 1 / -1; padding-left: 0; }
+}
+
+/* ---------- weekly summary ---------- */
+.w-breadth { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+.w-b { display: inline-flex; align-items: center; gap: 6px; }
+.w-b b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.w-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.w-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.w-list li { padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; line-height: 1.5; }
+.w-list li:hover { background: var(--surface-2); }
+.w-list li.more-li, .w-list li.muted { cursor: default; }
+.w-list li.more-li:hover { background: none; }
+.w-r { color: var(--ink-2); font-size: 12px; }
+.w-movers { display: grid; gap: 6px; margin-top: 12px; }
+.w-movers > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.w-movers .hint { margin: 0; }
+@media (max-width: 760px) { .w-cols { grid-template-columns: minmax(0, 1fr); } }

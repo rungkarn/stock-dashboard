@@ -25,9 +25,9 @@ SUMMARY = ROOT / "data" / "summary.json"
 SYMBOLS = ROOT / "symbols.json"
 
 BENCHMARK = "TDEX"  # ThaiDEX SET50 ETF; Yahoo has no history for the SET/SET50 index
-FULL_RANGE = "2y"
+FULL_RANGE = "5y"  # long enough for the backtest (scripts/backtest.py)
 INC_RANGE = "1mo"
-KEEP_DAYS = 3 * 366
+KEEP_DAYS = 5 * 366 + 31
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
 WIN_RESERVED = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", re.I)
 ICT = dt.timezone(dt.timedelta(hours=7))

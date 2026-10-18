@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import fetch_prices as fp  # noqa: E402
 import fetch_set_info as fs  # noqa: E402
+import backtest as bt  # noqa: E402
+import weekly_summary as ws  # noqa: E402
 
 
 def doc_from_closes(closes, start="2024-01-01", vol=1000):
@@ -122,6 +124,57 @@ class TestDividends(unittest.TestCase):
         self.assertEqual(e["type"], "XR")
         self.assertEqual(e["xdate"], "2024-11-15")
         self.assertEqual(e["sub"], ["2024-12-09", None])
+
+
+class TestBacktest(unittest.TestCase):
+    def test_score_series_matches_score_at(self):
+        import random
+        rnd = random.Random(1)
+        closes = [10.0]
+        for _ in range(400):
+            closes.append(max(0.5, closes[-1] * (1 + rnd.gauss(0, 0.02))))
+        series = bt.score_series(closes)
+        for back in (0, 1, 5, 37, 150):
+            self.assertEqual(series[len(closes) - 1 - back], fp.score_at(closes, back))
+
+    def test_spearman(self):
+        self.assertAlmostEqual(bt.spearman([1, 2, 3, 4], [10, 20, 30, 40]), 1.0)
+        self.assertAlmostEqual(bt.spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1.0)
+        self.assertIsNone(bt.spearman([1, 1, 1], [1, 2, 3]))
+
+    def test_stats(self):
+        st = bt.stats([0.1, -0.1, 0.2], [0.05, -0.2, 0.1])
+        self.assertEqual(st["n"], 3)
+        self.assertAlmostEqual(st["hit"], 66.7)
+        self.assertEqual(bt.stats([], []), {"n": 0})
+
+
+class TestWeekly(unittest.TestCase):
+    def bars(self, closes):
+        return doc_from_closes(closes)["bars"]
+
+    def test_flat_price_is_not_new_high(self):
+        b = self.bars([1.0] * 300)
+        f = ws.week_facts("X", b, b[-5][0])
+        self.assertFalse(f["high52"])
+        self.assertFalse(f["low52"])
+
+    def test_strict_new_low(self):
+        b = self.bars([2.0] * 296 + [1.9, 1.8, 1.7, 1.6])
+        self.assertTrue(ws.week_facts("X", b, b[-5][0])["low52"])
+
+    def test_ma200_whipsaw_not_reported(self):
+        # above MA200 at week start, dips below mid-week, ends above -> neither flag
+        closes = [1.0] * 294 + [1.1] + [1.05, 0.9, 0.9, 1.05, 1.06]
+        b = self.bars(closes)
+        f = ws.week_facts("X", b, b[-5][0])
+        self.assertFalse(f["below200"])
+        self.assertFalse(f["above200"])
+
+    def test_ma200_break_down(self):
+        closes = [1.0] * 295 + [1.05, 1.0, 0.95, 0.9, 0.85]
+        b = self.bars(closes)
+        self.assertTrue(ws.week_facts("X", b, b[-5][0])["below200"])
 
 
 if __name__ == "__main__":

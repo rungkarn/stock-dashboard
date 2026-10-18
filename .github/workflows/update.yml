@@ -41,6 +41,12 @@ jobs:
         if: github.event_name != 'push'
         run: python scripts/fetch_prices.py ${{ inputs.full && '--full' || '' }}
 
+      - name: Backtest + weekly summary (no network)
+        if: github.event_name != 'push'
+        run: |
+          python scripts/backtest.py
+          python scripts/weekly_summary.py
+
       - name: Unit tests
         run: python -m unittest discover -s tests
 
