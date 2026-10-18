@@ -12,7 +12,9 @@ on:
         default: false
   push:
     branches: [main]
-    paths-ignore: ["data/**"]
+    # data/prices is pushed by this workflow itself (GITHUB_TOKEN pushes never re-trigger);
+    # a PC push of data/set_info* should redeploy the page.
+    paths-ignore: ["data/prices/**"]
 
 permissions:
   contents: write

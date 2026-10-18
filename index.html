@@ -41,6 +41,14 @@
   </section>
 
   <section class="card">
+    <div class="card-h">
+      <h2>ปฏิทินสิทธิประโยชน์ 60 วัน</h2>
+      <span class="hint" id="calHint">XD ปันผล · XR สิทธิซื้อหุ้นเพิ่มทุน · XW ใบสำคัญแสดงสิทธิ · XM ประชุมผู้ถือหุ้น</span>
+    </div>
+    <div class="cal" id="calendar"></div>
+  </section>
+
+  <section class="card">
     <div class="toolbar">
       <input id="q" type="search" placeholder="ค้นหาหุ้น…" autocomplete="off">
       <div class="seg" id="trendFilter"></div>
@@ -49,12 +57,14 @@
         <button data-v="holding">ที่ถือ</button>
         <button data-v="watch">Watchlist</button>
       </div>
+      <select id="sectorFilter" class="sel" aria-label="กลุ่มอุตสาหกรรม"><option value="">ทุกกลุ่มอุตสาหกรรม</option></select>
       <div class="seg" id="viewToggle">
-        <button data-v="table" class="on">ตาราง</button>
+        <button data-v="table" class="on">ตาราง: เทคนิค</button>
+        <button data-v="fund">ตาราง: ปันผล &amp; พื้นฐาน</button>
         <button data-v="heat">Heatmap</button>
       </div>
-      <label class="heat-period" id="heatPeriodWrap" hidden>
-        ช่วง
+      <div class="heat-period" id="heatPeriodWrap" hidden>
+        <label>ช่วง
         <select id="heatPeriod">
           <option value="chg">1 วัน</option>
           <option value="r1w">1 สัปดาห์</option>
@@ -64,8 +74,10 @@
           <option value="ytd">YTD</option>
           <option value="r1y">1 ปี</option>
           <option value="vs_ma200">vs MA200</option>
-        </select>
-      </label>
+          <option value="f_yield">Dividend yield</option>
+        </select></label>
+        <label class="chk"><input type="checkbox" id="heatBySector"> แยกตามกลุ่มอุตสาหกรรม</label>
+      </div>
     </div>
 
     <div class="table-wrap" id="tableView">
@@ -89,6 +101,28 @@
         <tbody></tbody>
       </table>
     </div>
+    <div class="table-wrap" id="fundView" hidden>
+      <table id="ftbl">
+        <thead><tr>
+          <th data-k="symbol" class="l">หุ้น</th>
+          <th data-k="close">ราคา</th>
+          <th data-k="score" class="l">แนวโน้ม</th>
+          <th data-k="f_yield" title="อัตราปันผล 12 เดือนล่าสุด (SET)">Yield</th>
+          <th data-k="f_divlast" class="l" title="เงินปันผลต่อหุ้นตามปีผลประกอบการ">ปันผล 6 ปี (บาท/หุ้น)</th>
+          <th data-k="f_streak" title="จ่ายปันผลติดต่อกันกี่ปี (นับถึงปีที่แล้ว)">จ่ายต่อเนื่อง</th>
+          <th data-k="f_payout">Payout</th>
+          <th data-k="f_pe">P/E</th>
+          <th data-k="f_pbv">P/BV</th>
+          <th data-k="f_roe">ROE</th>
+          <th data-k="f_growth" title="กำไรสุทธิปีล่าสุดเทียบปีก่อน">กำไรโต</th>
+          <th data-k="f_lastxd">XD ล่าสุด</th>
+          <th data-k="f_caps" class="l" title="XR/XW/XB/ปันผลหุ้น ใน 3 ปี">เพิ่มทุน 3 ปี</th>
+          <th data-k="f_mcap">Market cap</th>
+          <th data-k="f_sector" class="l">กลุ่ม</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
     <div class="heat" id="heatView" hidden></div>
     <p class="empty" id="empty" hidden>ไม่พบหุ้นตามเงื่อนไข</p>
   </section>
@@ -101,6 +135,8 @@
       <li><b>Vol / เฉลี่ย</b> ปริมาณวันล่าสุด ÷ เฉลี่ย 20 วัน; ≥ 2 เท่า = มีแรงซื้อขายผิดปกติ ควรดูคู่กับทิศราคา</li>
       <li><b>RSI 14</b> &gt; 70 ร้อนแรง/ซื้อมาก, &lt; 30 ขายมากเกินไป</li>
       <li><b>เทียบตลาด 3M</b> ผลตอบแทน 3 เดือนลบผลตอบแทน TDEX (ETF ที่อิง SET50) — บวก = ชนะตลาด</li>
+      <li><b>ปันผล 6 ปี</b> แท่งคือเงินปันผลเงินสดต่อหุ้นรวมตามปีผลประกอบการ (ปีปัจจุบันอาจยังไม่ครบ) — ดูความสม่ำเสมอ/การเติบโต; ไม่ได้ปรับการแตกพาร์</li>
+      <li><b>เพิ่มทุน 3 ปี</b> XR = สิทธิจองซื้อหุ้นเพิ่มทุน, XW = ได้รับวอร์แรนต์, XB = สิทธิอื่น (หุ้นกู้แปลงสภาพ ฯลฯ), XS = ปันผลเป็นหุ้น — เพิ่มทุนบ่อยมักทำให้ราคาต่อหุ้นถูก dilute</li>
       <li><b>Golden / Death cross</b> MA50 ตัด MA200 ขึ้น/ลงในช่วง 10 วันทำการล่าสุด</li>
       <li>ข้อมูลราคาปิดรายวันจาก Yahoo Finance อัปเดตอัตโนมัติ จ.–ศ. หลังตลาดปิด — เป็นข้อมูลประกอบการตัดสินใจ ไม่ใช่คำแนะนำการลงทุน</li>
     </ul>
@@ -129,11 +165,15 @@
         <li><i class="ln" style="--c:var(--ma20)"></i>MA20</li>
         <li><i class="ln" style="--c:var(--ma50)"></i>MA50</li>
         <li><i class="ln" style="--c:var(--ma200)"></i>MA200</li>
+        <li><i class="mk">D</i>XD</li>
+        <li><i class="mk">R</i>XR</li>
+        <li><i class="mk">W</i>XW</li>
       </ul>
     </div>
     <div class="ohlc" id="ohlc"></div>
     <div id="chart" class="chart"></div>
     <div class="stats" id="dStats"></div>
+    <div id="dFund"></div>
   </section>
 </div>
 
