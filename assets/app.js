@@ -438,6 +438,53 @@
       (state.group === "all" || r.group === state.group));
   }
 
+  // ---------- mobile: cards instead of wide tables ----------
+  const mq = matchMedia("(max-width: 640px)");
+  const isMobile = () => mq.matches;
+  (mq.addEventListener ? mq.addEventListener("change", () => render()) : mq.addListener(() => render()));
+  const MSORT = {
+    table: [["score", "แนวโน้ม"], ["chg", "1 วัน"], ["r1w", "1 สัปดาห์"], ["r1m", "1 เดือน"], ["r3m", "3 เดือน"], ["r1y", "1 ปี"], ["vs_ma200", "ห่าง MA200"], ["pos52", "ตำแหน่ง 52W"], ["vol_ratio", "Vol / เฉลี่ย"], ["rsi", "RSI"], ["rs3m", "เทียบตลาด 3M"], ["symbol", "ชื่อหุ้น"]],
+    fund: [["f_yield", "Yield"], ["f_fwdyield", "Yield คาด 12M"], ["f_streak", "จ่ายต่อเนื่อง"], ["f_payout", "Payout"], ["f_pe", "P/E"], ["f_pbv", "P/BV"], ["f_roe", "ROE"], ["f_growth", "กำไรโต"], ["f_lastxd", "XD ล่าสุด"], ["f_caps", "เพิ่มทุน 3 ปี"], ["f_mcap", "Market cap"], ["symbol", "ชื่อหุ้น"]],
+    port: [["p_pl", "🔒 %P/L"], ["p_weight", "🔒 น้ำหนัก"], ["p_yoc", "🔒 Yield on cost"]],
+  };
+  function buildMsort() {
+    const opts = [...(MSORT[state.view] || []), ...(port ? MSORT.port : [])];
+    const sel = $("#msort");
+    sel.innerHTML = opts.map(([k, l]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${l}</option>`).join("");
+    if (!opts.some(([k]) => k === state.sort)) sel.insertAdjacentHTML("afterbegin", `<option value="${state.sort}" selected>—</option>`);
+    $("#mdir").textContent = state.asc ? "▴ น้อยไปมาก" : "▾ มากไปน้อย";
+  }
+  $("#msort").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    state.asc = ["symbol", "f_pe", "f_pbv"].includes(state.sort);
+    render();
+  });
+  $("#mdir").addEventListener("click", () => { state.asc = !state.asc; render(); });
+  $("#mobileView").addEventListener("click", (e) => { const c = e.target.closest("[data-sym]"); if (c) openDetail(c.dataset.sym); });
+
+  function mval(label, v, c = "") { return `<span class="mv"><small>${label}</small><b class="${c}">${v}</b></span>`; }
+  function mobileCards(rows, fund) {
+    return rows.map((r) => {
+      const f = r.f || {};
+      const priv = r.p ? `<div class="mrow priv">${mval("🔒 ทุน", priceFmt(r.p_cost))}${mval("%P/L", pctFmt(r.p_pl), cls(r.p_pl))}${mval("น้ำหนัก", plainPct(r.p_weight, 1))}${fund ? mval("YoC", plainPct(r.p_yoc, 2)) : ""}</div>` : "";
+      const head = `<div class="mhead"><span><b>${esc(r.symbol)}</b>${idxTag(r.f)}${r.group === "watch" ? '<span class="w">watch</span>' : ""}</span>
+        <span class="mprice">${priceFmt(r.close)} <small class="${cls(r.chg)}">${pctFmt(r.chg)}</small></span></div>`;
+      if (!fund) {
+        return `<div class="mcard" data-sym="${esc(r.symbol)}">${head}
+          <div class="mrow">${trendBadge(r)}${r.signals.length ? `<span class="hint">${r.signals.length} สัญญาณ</span>` : ""}</div>
+          <div class="mrow">${mval("1W", pctFmt(r.r1w), cls(r.r1w))}${mval("1M", pctFmt(r.r1m), cls(r.r1m))}${mval("3M", pctFmt(r.r3m), cls(r.r3m))}${mval("1Y", pctFmt(r.r1y), cls(r.r1y))}</div>
+          <div class="mrow">${spark(r.spark, 110, 28)}<span class="mv"><small>52W ${Math.round(r.pos52 ?? 0)}%</small>${r.pos52 == null ? "–" : `<span class="range52"><i style="left:${r.pos52}%"></i></span>`}</span>${mval("vs MA200", pctFmt(r.vs_ma200), cls(r.vs_ma200))}${r.vol_ratio >= 2 ? mval("Vol", nf(1).format(r.vol_ratio) + "×") : ""}</div>
+          ${priv}</div>`;
+      }
+      const caps = (f.caps_3y || []);
+      return `<div class="mcard" data-sym="${esc(r.symbol)}">${head}
+        <div class="mrow">${mval("Yield", plainPct(r.f_yield, 2))}${mval("คาด 12M", plainPct(r.f_fwdyield, 2))}${mval("Payout", r.f_payout == null ? "–" : nf(0).format(r.f_payout) + "%", r.f_payout > 100 ? "neg" : "")}${mval("ต่อเนื่อง", r.f_streak ? r.f_streak + " ปี" : "–")}</div>
+        <div class="mrow">${r.f ? divBars(f.divs, 110, 26) : ""}${mval("P/E", num(r.f_pe, 1))}${mval("P/BV", num(r.f_pbv, 2))}${mval("ROE", r.f_roe == null ? "–" : nf(1).format(r.f_roe) + "%", cls(r.f_roe))}</div>
+        <div class="mrow">${mval("XD ล่าสุด", r.f_lastxd ? thDate(r.f_lastxd) : "–")}${caps.length ? `<span class="mv"><small>เพิ่มทุน 3 ปี</small><span>${[...new Set(caps.map((c) => c.type))].map((t) => caTag(t)).join(" ")}</span></span>` : ""}<span class="hint msec">${esc(r.f_sector || "")}</span></div>
+        ${priv}</div>`;
+    }).join("");
+  }
+
   // ---------- render ----------
   function render() {
     if (!summary) return;
@@ -457,6 +504,15 @@
       return typeof x === "string" ? dir * x.localeCompare(y) : dir * (x - y);
     });
     $("#empty").hidden = rows.length > 0;
+    const mobileList = isMobile() && state.view !== "heat";
+    $("#msortWrap").hidden = !mobileList;
+    $("#mobileView").hidden = !mobileList;
+    if (mobileList) {
+      $("#tableView").hidden = $("#fundView").hidden = $("#heatView").hidden = $("#heatPeriodWrap").hidden = true;
+      buildMsort();
+      $("#mobileView").innerHTML = mobileCards(rows, state.view === "fund");
+      return;
+    }
     $("#tableView").hidden = state.view !== "table";
     $("#fundView").hidden = state.view !== "fund";
     $("#heatView").hidden = state.view !== "heat";

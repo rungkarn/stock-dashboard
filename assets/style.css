@@ -352,3 +352,45 @@ table.ev tr { cursor: default; }
 .w-movers > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .w-movers .hint { margin: 0; }
 @media (max-width: 760px) { .w-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- mobile & narrow screens ---------- */
+/* keep the stock column visible while scrolling wide tables sideways */
+#tbl th:first-child, #tbl td:first-child, #ftbl th:first-child, #ftbl td:first-child {
+  /* -16px: .table-wrap has 16px inline padding, so 0 would stick inside it and leave a gap */
+  position: sticky; left: -16px; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--grid);
+}
+#tbl tbody tr:hover td:first-child, #ftbl tbody tr:hover td:first-child { background: var(--surface-2); }
+.msort { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.msort label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.msort select { height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 0 6px; }
+.msort .pbtn { height: 34px; }
+.mlist { display: grid; gap: 8px; }
+.mcard { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; display: grid; gap: 6px; background: var(--surface); }
+.mcard:active { background: var(--surface-2); }
+.mhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mhead b { font-size: 15px; }
+.mprice { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mprice small { font-weight: 500; margin-left: 4px; }
+.mrow { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.mrow.priv { border-top: 1px dashed var(--grid); padding-top: 6px; }
+.mv { display: inline-flex; flex-direction: column; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.mv small { color: var(--muted); font-size: 11px; }
+.mv b { font-weight: 600; font-size: 13px; }
+.mv .range52 { width: 70px; }
+.msec { margin-left: auto; font-size: 11px; }
+@media (max-width: 640px) {
+  .toolbar { gap: 6px; }
+  .toolbar .seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .toolbar .seg::-webkit-scrollbar { display: none; }
+  .seg button { white-space: nowrap; padding: 6px 9px; }
+  .sel { max-width: 100%; flex: 1 1 100%; }
+  .card { padding: 12px; }
+  main { gap: 10px; }
+  .tiles { gap: 8px; }
+  .tile { padding: 10px 12px; }
+  .tile .v { font-size: 19px; }
+  .drawer-panel { padding: 12px; }
+  .d-price .big { font-size: 24px; }
+  .cal-day { grid-template-columns: 72px minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
