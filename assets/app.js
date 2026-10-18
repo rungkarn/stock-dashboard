@@ -238,6 +238,8 @@
       f_yield: f.yield,
       f_divlast: lastYearDiv,
       f_divyield_calc: lastYearDiv && r.close ? lastYearDiv / r.close * 100 : null,
+      f_fwd: f.fwd_div,
+      f_fwdyield: f.fwd_div && r.close ? f.fwd_div / r.close * 100 : null,
       f_streak: f.div_streak,
       f_payout: f.payout,
       f_pe: f.pe,
@@ -316,6 +318,7 @@
     renderOverview();
     renderSignals();
     renderCalendar();
+    renderIncome();
     const rows = filtered();
     const k = state.sort, dir = state.asc ? 1 : -1;
     rows.sort((a, b) => {
@@ -450,11 +453,55 @@
       return `<div class="cal-day"><div class="cal-date"><b>${thDate(d, { day: "numeric", month: "short" })}</b><span>${days === 0 ? "วันนี้" : days === 1 ? "พรุ่งนี้" : `อีก ${days} วัน`}</span></div>
         <div class="cal-items">${byDate[d].map((e) => {
           const r = state.rows.find((x) => x.symbol === e.symbol);
-          return `<button class="cal-item" data-sym="${esc(e.symbol)}">${caTag(e.type)}<b>${esc(e.symbol)}</b><span>${eventDetail(e, r && r.close)}</span></button>`;
+          return `<button class="cal-item${e.est ? " est" : ""}" data-sym="${esc(e.symbol)}">${caTag(e.type)}<b>${esc(e.symbol)}</b><span>${e.est ? "คาด ~" : ""}${eventDetail(e, r && r.close)}</span></button>`;
         }).join("")}</div></div>`;
     }).join("");
   }
   $("#calendar").addEventListener("click", (e) => { const b = e.target.closest("[data-sym]"); if (b) openDetail(b.dataset.sym); });
+
+  // expected dividend cash flow for the private portfolio, by pay month
+  function renderIncome() {
+    const card = $("#incomeCard");
+    const held = state.rows.filter((r) => r.p && r.f && r.f.proj && r.f.proj.length);
+    if (!held.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    const bucket = Object.fromEntries(months.map((m) => [m, { ann: 0, est: 0, items: [] }]));
+    const all = [];
+    held.forEach((r) => r.f.proj.forEach((e) => {
+      const pay = e.pay || new Date(new Date(e.xdate + "T00:00:00").getTime() + 21 * 864e5).toISOString().slice(0, 10);
+      const m = pay.slice(0, 7), amt = e.amount * r.p.shares;
+      const it = { sym: r.symbol, xdate: e.xdate, pay, amt, per: e.amount, est: e.est };
+      all.push(it);
+      if (!bucket[m]) return;
+      bucket[m][e.est ? "est" : "ann"] += amt;
+      bucket[m].items.push(it);
+    }));
+    const total = months.reduce((a, m) => a + bucket[m].ann + bucket[m].est, 0);
+    const ann = months.reduce((a, m) => a + bucket[m].ann, 0);
+    $("#incomeHint").textContent = `รวม ~${nf(0).format(total)} บาท (ประกาศแล้ว ${nf(0).format(ann)}) · หลังหักภาษี 10% ~${nf(0).format(total * 0.9)}`;
+    const max = Math.max(1, ...months.map((m) => bucket[m].ann + bucket[m].est));
+    const mLabel = (m) => new Date(m + "-01T00:00:00").toLocaleDateString("th-TH", { month: "short", year: "2-digit" });
+    $("#incomeChart").innerHTML = months.map((m) => {
+      const b = bucket[m], v = b.ann + b.est;
+      const tip = b.items.sort((x, y) => y.amt - x.amt).map((i) => `${i.sym} ${nf(0).format(i.amt)} บาท${i.est ? " (คาด)" : ""}`).join("\n");
+      return `<div class="dc-col" title="${esc(mLabel(m))}: ${nf(0).format(v)} บาท\n${esc(tip)}">
+        <span class="dc-v">${v ? big(v) : ""}</span>
+        <div class="dc-bar est" style="height:${v ? Math.max(3, b.est / max * 100) : 0}%"></div>
+        <div class="dc-bar" style="height:${b.ann ? Math.max(3, b.ann / max * 100) : 0}%"></div>
+        <span class="dc-x">${mLabel(m)}</span></div>`;
+    }).join("");
+    const today = new Date().toISOString().slice(0, 10);
+    const next = all.filter((i) => i.xdate >= today).sort((a, b) => a.xdate.localeCompare(b.xdate)).slice(0, 8);
+    $("#incomeList").innerHTML = next.length ? `<table><thead><tr><th class="l">XD</th><th class="l">หุ้น</th><th>บาท/หุ้น</th><th>ได้รับ ~</th><th class="l">จ่าย</th></tr></thead><tbody>${next.map((i) =>
+      `<tr data-sym="${esc(i.sym)}" class="${i.est ? "est" : ""}"><td class="l">${thDate(i.xdate)}${i.est ? ' <span class="hint">คาด</span>' : ""}</td><td class="l"><b>${esc(i.sym)}</b></td><td>${divFmt(i.per)}</td><td>${nf(0).format(i.amt)}</td><td class="l">${thDate(i.pay)}</td></tr>`).join("")}</tbody></table>` : "";
+  }
+  $("#incomeList").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-sym]"); if (tr) openDetail(tr.dataset.sym); });
 
   function sortMarks(id) {
     document.querySelectorAll(id + " th").forEach((th) => {
@@ -496,6 +543,7 @@
       <td>${priceFmt(r.close)}</td>
       <td class="l">${trendBadge(r)}</td>
       <td class="ret" style="background:${seqBg(r.f_yield, 8)}">${plainPct(r.f_yield, 2)}</td>
+      <td class="ret" style="background:${seqBg(r.f_fwdyield, 8)}" title="${r.f && r.f.proj && r.f.proj.length ? r.f.proj.map((e) => `${e.xdate} ${divFmt(e.amount)}${e.est ? " (คาด)" : ""}`).join("\n") : ""}">${plainPct(r.f_fwdyield, 2)}</td>
       <td class="l">${r.f ? divBars(f.divs) : "–"}</td>
       <td class="${r.f_streak ? "" : "muted"}">${r.f ? (r.f_streak ? r.f_streak + " ปี" : "–") : "–"}</td>
       <td class="${r.f_payout > 100 ? "neg" : ""}">${r.f_payout == null ? "–" : nf(0).format(r.f_payout) + "%"}</td>
@@ -630,6 +678,10 @@
             <div class="dc-bar" style="height:${Math.max(3, v / max * 100)}%"></div><span class="dc-x">${y}${partial ? "*" : ""}</span></div>`;
         }).join("")}</div>
         <p class="hint">* ปีที่ยังจ่ายไม่ครบ (มีแค่ปันผลระหว่างกาล) · ยอดต่อหุ้นตามที่ประกาศ ไม่ได้ปรับการแตกพาร์/เพิ่มทุน</p>`;
+      if (f.proj && f.proj.length) {
+        html += `<h3 class="sec">ปันผล 12 เดือนข้างหน้า <span class="hint">รวม ${divFmt(f.fwd_div)} บาท/หุ้น ≈ ${plainPct(f.fwd_div / r.close * 100, 2)} ของราคาปัจจุบัน${r.p ? ` · 🔒 ~${nf(0).format(f.fwd_div * r.p.shares)} บาท` : ""}</span></h3>
+          <div class="table-wrap"><table class="ev"><tbody>${f.proj.map((e) => `<tr class="${e.est ? "" : "future"}"><td class="l">${thDate(e.xdate)}</td><td class="l">${caTag("XD")}</td><td class="l wrap">${divFmt(e.amount)} บาท/หุ้น${e.pay ? ` · จ่าย ~${thDate(e.pay)}` : ""} · ${e.est ? "<b>คาดการณ์</b> จากปีก่อน (ยังไม่ประกาศ)" : "ประกาศแล้ว"}</td></tr>`).join("")}</tbody></table></div>`;
+      }
     } else if (!years.length) {
       html += `<h3 class="sec">เงินปันผล</h3><p class="hint">ไม่มีประวัติจ่ายปันผลเงินสด</p>`;
     }

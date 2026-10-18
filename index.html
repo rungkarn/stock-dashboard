@@ -35,6 +35,16 @@
     <div class="tiles" id="tiles"></div>
   </section>
 
+  <section class="card" id="incomeCard" hidden>
+    <div class="card-h">
+      <h2>🔒 ปันผลที่คาดว่าจะได้รับ 12 เดือนข้างหน้า</h2>
+      <span class="hint" id="incomeHint"></span>
+    </div>
+    <div class="divchart income" id="incomeChart"></div>
+    <p class="hint">ตามเดือนวันจ่าย · แท่งทึบ = ประกาศแล้ว, แท่งจาง = คาดจากปีก่อน (จำนวนเท่าเดิม) · ก่อนหักภาษี ณ ที่จ่าย 10% · ต้องถือหุ้นก่อนวัน XD</p>
+    <div class="income-list" id="incomeList"></div>
+  </section>
+
   <section class="card">
     <div class="card-h">
       <h2>สัญญาณล่าสุด</h2>
@@ -46,7 +56,7 @@
   <section class="card">
     <div class="card-h">
       <h2>ปฏิทินสิทธิประโยชน์ 60 วัน</h2>
-      <span class="hint" id="calHint">XD ปันผล · XR สิทธิซื้อหุ้นเพิ่มทุน · XW ใบสำคัญแสดงสิทธิ · XM ประชุมผู้ถือหุ้น</span>
+      <span class="hint" id="calHint">XD ปันผล · XR สิทธิซื้อหุ้นเพิ่มทุน · XW ใบสำคัญแสดงสิทธิ · XM ประชุมผู้ถือหุ้น · กรอบประ = คาดจากปีก่อน ยังไม่ประกาศ</span>
     </div>
     <div class="cal" id="calendar"></div>
   </section>
@@ -115,6 +125,7 @@
           <th data-k="close">ราคา</th>
           <th data-k="score" class="l">แนวโน้ม</th>
           <th data-k="f_yield" title="อัตราปันผล 12 เดือนล่าสุด (SET)">Yield</th>
+          <th data-k="f_fwdyield" title="ปันผลที่ประกาศแล้ว + คาดจากปีก่อน ใน 12 เดือนข้างหน้า ÷ ราคาปัจจุบัน">Yield คาด 12M</th>
           <th data-k="f_divlast" class="l" title="เงินปันผลต่อหุ้นตามปีผลประกอบการ">ปันผล 6 ปี (บาท/หุ้น)</th>
           <th data-k="f_streak" title="จ่ายปันผลติดต่อกันกี่ปี (นับถึงปีที่แล้ว)">จ่ายต่อเนื่อง</th>
           <th data-k="f_payout">Payout</th>

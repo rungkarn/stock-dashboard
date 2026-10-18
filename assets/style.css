@@ -308,3 +308,13 @@ table.ev tr { cursor: default; }
 .ts-h { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
 .ts { display: flex; gap: 1px; height: 14px; }
 .ts i { flex: 1 1 0; min-width: 1px; border-radius: 1px; }
+
+/* ---------- projected dividends ---------- */
+.cal-item.est { border-style: dashed; background: transparent; }
+.divchart.income { height: 150px; }
+.divchart.income .dc-col { gap: 0; }
+.dc-bar.est { opacity: 0.4; border-radius: 4px 4px 0 0; }
+.dc-bar.est + .dc-bar { border-radius: 0; }
+.income-list table { margin-top: 10px; }
+.income-list tr { cursor: pointer; }
+.income-list tr.est td { color: var(--ink-2); }

@@ -41,6 +41,12 @@ jobs:
         if: github.event_name != 'push'
         run: python scripts/fetch_prices.py ${{ inputs.full && '--full' || '' }}
 
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
+      - name: Sanity-check data
+        run: python scripts/check_data.py
+
       - name: Commit data
         if: github.event_name != 'push'
         run: |

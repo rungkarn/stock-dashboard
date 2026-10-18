@@ -109,6 +109,35 @@ def div_by_year(evs):
     return {y: round(v, 4) for y, v in sorted(by.items())}
 
 
+def project_dividends(evs, today=None):
+    """Cash dividends expected in the next 365 days.
+
+    Announced future XDs are taken as-is (est=False). Each XD from the past 365 days is
+    assumed to repeat one year later with the same amount (est=True), unless an announced
+    XD already falls within 60 days of that date.
+    """
+    today = dt.date.fromisoformat(today or TODAY)
+    horizon = today + dt.timedelta(days=365)
+    cash = [e for e in evs if e["type"] == "XD" and e.get("amount") and e.get("xdate")]
+    out = []
+    announced = []
+    for e in cash:
+        x = dt.date.fromisoformat(e["xdate"])
+        if today < x <= horizon:
+            announced.append(x)
+            out.append({"xdate": e["xdate"], "pay": e.get("pay"), "amount": e["amount"], "est": False})
+    for e in cash:
+        x = dt.date.fromisoformat(e["xdate"])
+        if not (today - dt.timedelta(days=365) < x <= today):
+            continue
+        nx = x + dt.timedelta(days=365)
+        if any(abs((nx - a).days) <= 60 for a in announced):
+            continue
+        pay = e.get("pay") and (dt.date.fromisoformat(e["pay"]) + dt.timedelta(days=365)).isoformat()
+        out.append({"xdate": nx.isoformat(), "pay": pay, "amount": e["amount"], "est": True})
+    return sorted(out, key=lambda e: e["xdate"])
+
+
 def financials(fin):
     keep = ("totalRevenue", "netProfit", "eps", "roe", "roa", "netProfitMargin", "deRatio", "totalAsset", "equity")
     rows = []
@@ -145,6 +174,7 @@ def build(s, sym, set50, set100):
     fin_rows = financials(fin)
     annual = [f for f in fin_rows if f["annual"]]
 
+    proj = project_dividends(evs)
     row = {
         "sector": prof.get("sectorName") or prof.get("industryName"),
         "industry": prof.get("industryName"),
@@ -164,6 +194,8 @@ def build(s, sym, set50, set100):
         "div_years_5": sum(1 for y in range(int(TODAY[:4]) - 5, int(TODAY[:4])) if str(y) in divs),
         "last_xd": {k: past[0].get(k) for k in ("xdate", "amount", "pay")} if past else None,
         "next": {k: nxt[0].get(k) for k in ("type", "xdate", "amount", "ratio", "price", "pay")} if nxt else None,
+        "proj": proj,
+        "fwd_div": round(sum(e["amount"] for e in proj), 4) if proj else None,
         "caps_3y": [{k: e.get(k) for k in ("type", "xdate", "ratio", "price", "rights")}
                     for e in caps if (e.get("xdate") or "") >= cutoff3y],
         "roe": annual[-1]["roe"] if annual else None,
@@ -230,7 +262,11 @@ def main(only):
             when = e.get("xdate") or ""
             if TODAY <= when <= horizon:
                 upcoming.append({"symbol": sym, **{k: e.get(k) for k in ("type", "xdate", "amount", "ratio", "price", "pay", "meeting", "rights")}})
-    upcoming.sort(key=lambda e: (e["xdate"], e["symbol"]))
+    for sym, r in rows.items():
+        for e in r.get("proj") or []:
+            if e["est"] and TODAY <= e["xdate"] <= horizon:
+                upcoming.append({"symbol": sym, "type": "XD", "xdate": e["xdate"], "amount": e["amount"], "pay": e["pay"], "est": True})
+    upcoming.sort(key=lambda e: (e["xdate"], e.get("est", False), e["symbol"]))
 
     OUT.write_text(json.dumps({
         "generated": dt.datetime.now(ICT).isoformat(timespec="minutes"),
